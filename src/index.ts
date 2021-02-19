@@ -4,27 +4,32 @@ import * as dgram from 'dgram';
 import {EventEmitter} from 'events';
 import {AddressInfo} from 'net';
 
+const util = require('util');
+
 import * as constants from './constants';
 import * as constantsTypes from './constants/types';
-import {PacketCarSetupDataParser, PacketCarStatusDataParser, PacketCarTelemetryDataParser, PacketEventDataParser, PacketFormatParser, PacketHeaderParser, PacketLapDataParser, PacketMotionDataParser, PacketParticipantsDataParser, PacketSessionDataParser,} from './parsers/packets';
+import {PacketCarSetupDataParser, PacketCarStatusDataParser, PacketCarTelemetryDataParser, PacketEventDataParser, PacketFinalClassificationDataParser, PacketFormatParser, PacketHeaderParser, PacketLapDataParser, PacketLobbyInfoDataParser, PacketMotionDataParser, PacketParticipantsDataParser, PacketSessionDataParser,} from './parsers/packets';
 import * as packetTypes from './parsers/packets/types';
 import {Options} from './types';
 
 const DEFAULT_PORT = 20777;
+const BIGINT_ENABLED = true;
 
 /**
  *
  */
 class F1TelemetryClient extends EventEmitter {
   port: number;
+  bigintEnabled: boolean;
   client?: dgram.Socket;
 
   constructor(opts: Options = {}) {
     super();
 
-    const {port = DEFAULT_PORT} = opts;
+    const {port = DEFAULT_PORT, bigintEnabled = BIGINT_ENABLED} = opts;
 
     this.port = port;
+    this.bigintEnabled = bigintEnabled;
     this.client = dgram.createSocket('udp4');
   }
 
@@ -32,11 +37,14 @@ class F1TelemetryClient extends EventEmitter {
    *
    * @param {Buffer} buffer
    */
-  // tslint:disable-next-line:no-any
-  static parsePacketHeader(buffer: Buffer): Parser.Parsed<any> {
+  static parsePacketHeader(
+      buffer: Buffer, bigintEnabled: boolean
+      // tslint:disable-next-line:no-any
+      ): Parser.Parsed<any> {
     const packetFormatParser = new PacketFormatParser();
     const {m_packetFormat} = packetFormatParser.fromBuffer(buffer);
-    const packetHeaderParser = new PacketHeaderParser(m_packetFormat);
+    const packetHeaderParser =
+        new PacketHeaderParser(m_packetFormat, bigintEnabled);
     return packetHeaderParser.fromBuffer(buffer);
   }
 
@@ -75,6 +83,12 @@ class F1TelemetryClient extends EventEmitter {
       case PACKETS.carStatus:
         return PacketCarStatusDataParser;
 
+      case PACKETS.finalClassification:
+        return PacketFinalClassificationDataParser;
+
+      case PACKETS.lobbyInfo:
+        return PacketLobbyInfoDataParser;
+
       default:
         return null;
     }
@@ -86,7 +100,7 @@ class F1TelemetryClient extends EventEmitter {
    */
   parseMessage(message: Buffer) {
     const {m_packetFormat, m_packetId} =
-        F1TelemetryClient.parsePacketHeader(message);
+        F1TelemetryClient.parsePacketHeader(message, this.bigintEnabled);
 
     const parser = F1TelemetryClient.getParserByPacketId(m_packetId);
 
@@ -94,7 +108,7 @@ class F1TelemetryClient extends EventEmitter {
       return;
     }
 
-    const packetData = new parser(message, m_packetFormat);
+    const packetData = new parser(message, m_packetFormat, this.bigintEnabled);
     const packetKeys = Object.keys(constants.PACKETS);
 
     this.emit(packetKeys[m_packetId], packetData.data);
@@ -119,7 +133,7 @@ class F1TelemetryClient extends EventEmitter {
       this.client.setBroadcast(true);
     });
 
-    this.client.on('message', m => this.parseMessage(m));
+    this.client.on('message', (m) => this.parseMessage(m));
     this.client.bind(this.port);
   }
 

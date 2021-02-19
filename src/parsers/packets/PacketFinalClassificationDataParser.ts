@@ -1,10 +1,10 @@
 import {F1Parser} from '../F1Parser';
-import {CarStatusDataParser} from './CarStatusDataParser';
+import {FinalClassificationDataParser} from './FinalClassificationDataParser';
 import {PacketHeaderParser} from './PacketHeaderParser';
-import {PacketCarStatusData} from './types';
+import {PacketFinalClassificationData} from './types';
 
-export class PacketCarStatusDataParser extends F1Parser {
-  data: PacketCarStatusData;
+export class PacketFinalClassificationDataParser extends F1Parser {
+  data: PacketFinalClassificationData;
 
   constructor(buffer: Buffer, packetFormat: number, bigintEnabled: boolean) {
     super();
@@ -13,9 +13,10 @@ export class PacketCarStatusDataParser extends F1Parser {
         .nest('m_header', {
           type: new PacketHeaderParser(packetFormat, bigintEnabled),
         })
-        .array('m_carStatusData', {
-          length: packetFormat === 2020 ? 22 : 20,
-          type: new CarStatusDataParser(packetFormat),
+        .uint8('m_numCars')
+        .array('m_classificationData', {
+          length: 22,
+          type: new FinalClassificationDataParser(),
         });
 
     this.data = this.fromBuffer(buffer);

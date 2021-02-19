@@ -3,15 +3,18 @@ import {F1Parser} from '../F1Parser';
 import {MarshalZoneParser} from './MarshalZoneParser';
 import {PacketHeaderParser} from './PacketHeaderParser';
 import {PacketSessionData} from './types';
+import {WeatherForecastSampleParser} from './WeatherForecastSampleParser';
 
 export class PacketSessionDataParser extends F1Parser {
   data: PacketSessionData;
 
-  constructor(buffer: Buffer, packetFormat: number) {
+  constructor(buffer: Buffer, packetFormat: number, bigintEnabled: boolean) {
     super();
 
     this.endianess('little')
-        .nest('m_header', {type: new PacketHeaderParser(packetFormat)})
+        .nest('m_header', {
+          type: new PacketHeaderParser(packetFormat, bigintEnabled),
+        })
         .uint8('m_weather')
         .int8('m_trackTemperature')
         .int8('m_airTemperature')
@@ -22,7 +25,9 @@ export class PacketSessionDataParser extends F1Parser {
 
     if (packetFormat === 2018) {
       this.uint8('m_era');
-    } else if (packetFormat === 2019) {
+    }
+
+    if (packetFormat === 2019 || packetFormat === 2020) {
       this.uint8('m_formula');
     }
 
@@ -37,6 +42,14 @@ export class PacketSessionDataParser extends F1Parser {
         .array('m_marshalZones', {length: 21, type: new MarshalZoneParser()})
         .uint8('m_safetyCarStatus')
         .uint8('m_networkGame');
+
+    if (packetFormat === 2020) {
+      this.uint8('m_numWeatherForecastSamples')
+          .array('m_weatherForecastSamples', {
+            type: new WeatherForecastSampleParser(),
+            length: 20,
+          });
+    }
 
     this.data = this.fromBuffer(buffer);
   }
